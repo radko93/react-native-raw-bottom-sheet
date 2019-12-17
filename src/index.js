@@ -22,9 +22,11 @@ const SUPPORTED_ORIENTATIONS = [
 class RBSheet extends Component {
   constructor(props) {
     super(props);
+
+    this.animatedHeight = new Animated.Value(props.height)
+
     this.state = {
       modalVisible: false,
-      animatedHeight: new Animated.Value(0),
       pan: new Animated.ValueXY()
     };
 
@@ -33,44 +35,52 @@ class RBSheet extends Component {
 
   setModalVisible(visible) {
     const { height, minClosingHeight, duration, onClose } = this.props;
-    const { animatedHeight, pan } = this.state;
+    const { pan } = this.state;
+    const { animatedHeight } = this;
     if (visible) {
       this.setState({ modalVisible: visible });
-      Animated.timing(animatedHeight, {
-        toValue: height,
-        duration
-      }).start();
     } else {
       Animated.timing(animatedHeight, {
-        toValue: minClosingHeight,
-        duration
+        toValue: height,
+        duration,
+        useNativeDriver: true
       }).start(() => {
         pan.setValue({ x: 0, y: 0 });
+        this.animatedHeight.setValue(height)
         this.setState({
           modalVisible: visible,
-          animatedHeight: new Animated.Value(0)
         });
-
         if (typeof onClose === "function") onClose();
       });
     }
   }
 
+  openBottomSheet({ animatedHeight, duration }) {
+    Animated.timing(animatedHeight, {
+      toValue: 0,
+      duration,
+      useNativeDriver: true,
+    }).start();
+  }
+
   createPanResponder(props) {
     const { closeOnDragDown, height } = props;
-    const { pan } = this.state;
+    const { animatedHeight } = this;
     this.panResponder = PanResponder.create({
       onStartShouldSetPanResponder: () => closeOnDragDown,
       onPanResponderMove: (e, gestureState) => {
         if (gestureState.dy > 0) {
-          Animated.event([null, { dy: pan.y }])(e, gestureState);
+          Animated.event([null, { dy: animatedHeight }])(e, gestureState);
         }
       },
       onPanResponderRelease: (e, gestureState) => {
-        if (height / 4 - gestureState.dy < 0) {
+        if (height / 2.5 - gestureState.dy < 0) {
           this.setModalVisible(false);
         } else {
-          Animated.spring(pan, { toValue: { x: 0, y: 0 } }).start();
+          Animated.spring(animatedHeight, {
+            toValue: 0,
+            useNativeDriver: true
+          }).start();
         }
       }
     });
@@ -85,15 +95,9 @@ class RBSheet extends Component {
   }
 
   render() {
-    const {
-      animationType,
-      closeOnDragDown,
-      closeOnPressMask,
-      closeOnPressBack,
-      children,
-      customStyles
-    } = this.props;
-    const { animatedHeight, pan, modalVisible } = this.state;
+    const { animationType, closeOnPressBack, closeOnPressMask, children, customStyles, duration } = this.props;
+    const { pan, modalVisible } = this.state;
+    const { animatedHeight } = this;
     const panStyle = {
       transform: pan.getTranslateTransform()
     };
@@ -103,6 +107,7 @@ class RBSheet extends Component {
         transparent
         animationType={animationType}
         visible={modalVisible}
+        onShow={() => this.openBottomSheet({ animatedHeight, duration })}
         supportedOrientations={SUPPORTED_ORIENTATIONS}
         onRequestClose={() => {
           if (closeOnPressBack) this.setModalVisible(false);
@@ -120,7 +125,12 @@ class RBSheet extends Component {
           />
           <Animated.View
             {...this.panResponder.panHandlers}
-            style={[panStyle, styles.container, { height: animatedHeight }, customStyles.container]}
+            style={[styles.container, customStyles.container, {
+              height: this.props.height,
+              transform: [
+                { translateY: animatedHeight }
+              ]
+            }]}
           >
             {closeOnDragDown && (
               <View style={styles.draggableContainer}>
@@ -149,11 +159,11 @@ RBSheet.propTypes = {
 };
 
 RBSheet.defaultProps = {
-  animationType: "none",
+  animationType: "fade",
   height: 260,
   minClosingHeight: 0,
   duration: 300,
-  closeOnDragDown: false,
+  closeOnDragDown: true,
   closeOnPressMask: true,
   closeOnPressBack: true,
   customStyles: {},
